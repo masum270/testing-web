@@ -9,6 +9,18 @@ import {
   recordExamResult
 } from '../services/adminService.js';
 import {
+  db,
+  auth,
+  collection,
+  addDoc,
+  doc,
+  setDoc,
+  getDoc,
+  increment,
+  serverTimestamp
+} from '../firebase.js';
+import { calcLevel } from '../lib/levelSystem.js';
+import {
   Clock,
   Send,
   Sparkles,
@@ -151,6 +163,12 @@ export const ExamHall: React.FC<ExamHallProps> = ({
     const scoreXP = calculateScoreXP(correctCount, wrongCount, true);
     const chapterName = chapter === 'all' ? 'সকল অধ্যায়' : chapter;
 
+    const uid = auth.currentUser?.uid || currentUser?.id || `anon_${Date.now()}`;
+    const email = auth.currentUser?.email || currentUser?.email || 'guest';
+    const displayName = currentUser?.name || auth.currentUser?.displayName || 'শিক্ষার্থী';
+    const photoURL = currentUser?.photoURL || auth.currentUser?.photoURL || '';
+    const todayDateStr = new Date().toISOString().split('T')[0];
+
     const result: ExamResult = {
       id: `exam_${Date.now()}`,
       date: new Date().toLocaleDateString('bn-BD'),
@@ -162,32 +180,105 @@ export const ExamHall: React.FC<ExamHallProps> = ({
       skippedCount,
       accuracy,
       scoreXP,
+      xpEarned: 100,
       timeTakenSeconds: timeSpent,
       answers: detailedAnswers
     };
 
-    // Save to Firestore exam_results & calculate rank
+    // 1. Create exam_results doc with addDoc and log id
     try {
-      const recorded = await recordExamResult({
-        userId: currentUser?.id || 'guest',
-        userEmail: currentUser?.email || 'guest@example.com',
-        userName: currentUser?.name || 'শিক্ষার্থী',
-        photoURL: currentUser?.photoURL,
+      const examDocData = {
+        uid,
+        userId: uid,
+        email,
+        userEmail: email,
+        displayName,
+        userName: displayName,
+        photoURL,
         subject,
         chapter: chapterName,
+        type: 'বোর্ড প্রশ্ন',
         score: scoreXP,
         totalMarks: totalQ,
+        totalQuestions: totalQ,
         correctCount,
         wrongCount,
+        percentage: accuracy,
         timeTaken: timeSpent,
+        createdAt: serverTimestamp(),
+        timestamp: Date.now(),
+        date: todayDateStr,
+        xpEarned: 100
+      };
+
+      const docRef = await addDoc(collection(db, 'exam_results'), examDocData);
+      console.log('Exam result saved with ID:', docRef.id);
+      result.id = docRef.id;
+
+      // 2. Also keep recordExamResult local cache updated for offline resilience
+      recordExamResult({
+        ...examDocData,
         answers: currentAnswers,
         rank: 1
-      });
-      if (recorded && recorded.rank) {
-        result.rank = recorded.rank;
-      }
+      }).catch(() => {});
     } catch (e) {
-      console.warn('recordExamResult failed:', e);
+      console.warn('Failed to save to exam_results via addDoc, falling back:', e);
+      try {
+        await recordExamResult({
+          userId: uid,
+          userEmail: email,
+          userName: displayName,
+          photoURL,
+          subject,
+          chapter: chapterName,
+          score: scoreXP,
+          totalMarks: totalQ,
+          correctCount,
+          wrongCount,
+          timeTaken: timeSpent,
+          answers: currentAnswers,
+          rank: 1
+        });
+      } catch (err) {
+        console.warn('Local save failed:', err);
+      }
+    }
+
+    // 3. Update users/{uid} document with XP increment and new level calculation
+    if (auth.currentUser?.uid || (currentUser?.id && !currentUser.id.startsWith('anon_'))) {
+      const targetUid = auth.currentUser?.uid || currentUser!.id;
+      const userRef = doc(db, 'users', targetUid);
+      try {
+        const userSnap = await getDoc(userRef);
+        let currentXP = 0;
+        let oldLevel = 0;
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          currentXP = uData.xp ?? uData.totalXP ?? 0;
+          oldLevel = uData.level ?? calcLevel(currentXP);
+        }
+        const newXP = currentXP + 100;
+        const newLevel = calcLevel(newXP);
+        result.newLevel = newLevel;
+        result.isLevelUp = newLevel > oldLevel;
+
+        await setDoc(
+          userRef,
+          {
+            xp: increment(100),
+            totalXP: increment(100),
+            level: newLevel,
+            totalExams: increment(1),
+            lastExamAt: serverTimestamp(),
+            name: displayName,
+            email,
+            photoURL
+          },
+          { merge: true }
+        );
+      } catch (userUpdateErr) {
+        console.warn('Could not update users doc XP and level:', userUpdateErr);
+      }
     }
 
     onFinishExam(result);

@@ -56,6 +56,8 @@ export interface ExamResultDoc {
   wrongCount: number;
   timeTaken: number;
   submittedAt: string;
+  date?: string;
+  xpEarned?: number;
   answers?: Record<string, number>;
   rank?: number;
 }

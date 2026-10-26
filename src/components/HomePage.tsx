@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { AuthUser } from '../types/auth.js';
 import { DailyStreak } from './DailyStreak.js';
+import { getLevelProgress } from '../lib/levelSystem.js';
 
 interface HomePageProps {
   user: UserProfile;
@@ -185,8 +186,55 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             )}
 
+            {/* Student Level & XP Progress Card */}
+            {isLoggedIn && (
+              <div
+                className="mt-6 p-4 sm:p-5 rounded-2xl border shadow-sm max-w-4xl mx-auto text-left"
+                style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}
+              >
+                {(() => {
+                  const progress = getLevelProgress(user.totalXP);
+                  return (
+                    <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">{progress.badge}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-[#6C5CE7]">
+                                লেভেল {toBengaliNumber(progress.currentLevel)}
+                              </span>
+                              <span className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>
+                                {progress.title}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                              {progress.currentLevel >= 7
+                                ? 'সর্বোচ্চ লেজেন্ডারি লেভেল অর্জিত!'
+                                : `পরবর্তী লেভেলের জন্য আরও ${toBengaliNumber(progress.neededXP)} XP প্রয়োজন (Next level needs ${progress.neededXP} XP)`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>
+                          {toBengaliNumber(user.totalXP)} / {toBengaliNumber(progress.nextXP)} XP ({toBengaliNumber(progress.percentage)}%)
+                        </div>
+                      </div>
+
+                      {/* XP Progress Bar */}
+                      <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative border border-slate-200 dark:border-slate-700">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-500 rounded-full transition-all duration-700 ease-out"
+                          style={{ width: `${progress.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Performance Summary Bar */}
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto">
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto">
               <div className="rounded-2xl p-3.5 sm:p-4 border shadow-xs text-center" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}>
                 <div className="w-8 h-8 rounded-xl bg-violet-100 text-[#6C5CE7] flex items-center justify-center mx-auto mb-2">
                   <CheckCircle className="w-4 h-4" />

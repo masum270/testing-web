@@ -414,8 +414,15 @@ export const AIFactory: React.FC = () => {
       ]);
       setUsageState(getTodayUsage());
     } catch (err: any) {
+      const isPerm =
+        err?.message?.toLowerCase().includes('permission') ||
+        err?.code === 'permission-denied' ||
+        err?.message?.includes('Missing or insufficient permissions');
+      const errorMsg = isPerm
+        ? 'Firestore Rules Publish করুন - Part 1 এর rules (Firebase Console > Firestore > Rules)'
+        : err.message;
       setTerminalLogs((prev) => [
-        `[${new Date().toLocaleTimeString()}] ❌ জেনারেশন ব্যর্থ: ${err.message}`,
+        `[${new Date().toLocaleTimeString()}] ❌ জেনারেশন ব্যর্থ: ${errorMsg}`,
         ...prev
       ]);
     } finally {

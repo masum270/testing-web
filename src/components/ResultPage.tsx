@@ -121,6 +121,14 @@ export const ResultPage: React.FC<ResultPageProps> = ({
           {feedbackSubtitle}
         </p>
 
+        {/* Level Up Banner if leveled up */}
+        {result.isLevelUp && result.newLevel !== undefined && (
+          <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 text-white font-extrabold text-sm sm:text-base shadow-xl flex items-center justify-center gap-2.5 animate-bounce">
+            <Sparkles className="w-5 h-5 text-yellow-200 shrink-0" />
+            <span>🎉 Level Up! Level {toBengaliNumber(result.newLevel)} Reached! অভিনন্দন!</span>
+          </div>
+        )}
+
         {/* Rank & XP Tags */}
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           {result.rank && (
@@ -133,9 +141,9 @@ export const ResultPage: React.FC<ResultPageProps> = ({
             </div>
           )}
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-bold text-xs sm:text-sm shadow-xs">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-400 text-amber-600 dark:text-amber-300 font-extrabold text-xs sm:text-sm shadow-md animate-pulse">
             <Award className="w-4 h-4 fill-amber-500 text-amber-500" />
-            <span>+{toBengaliNumber(result.scoreXP)} XP অর্জিত হয়েছে!</span>
+            <span>+{toBengaliNumber(result.xpEarned ?? 100)} XP!</span>
           </div>
         </div>
 

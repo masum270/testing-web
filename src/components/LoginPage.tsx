@@ -11,8 +11,7 @@ import {
   createUserWithEmailAndPassword
 } from 'firebase/auth';
 import {
-  syncGoogleUserData,
-  loginAsDemoStudent
+  syncGoogleUserData
 } from '../utils/auth.js';
 import { AuthUser } from '../types/auth.js';
 import {
@@ -42,6 +41,7 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
   onNavigateHome,
+  onNavigateForgotPassword,
   redirectMessage
 }) => {
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +59,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isAdminLoading, setIsAdminLoading] = useState(false);
 
+  // Owner Google Login PIN Modal State
+  const [showOwnerPinModal, setShowOwnerPinModal] = useState(false);
+  const [ownerGoogleUser, setOwnerGoogleUser] = useState<any>(null);
+  const [ownerGooglePinInput, setOwnerGooglePinInput] = useState('');
+  const [ownerGooglePinError, setOwnerGooglePinError] = useState<string | null>(null);
+
   const handleOwnerAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError(null);
@@ -67,53 +73,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const cleanEmail = adminEmail.trim().toLowerCase();
     const cleanPin = adminPin.trim();
 
-    if (cleanEmail !== 'masumbillahmmn2314@gmail.com') {
-      setIsAdminLoading(false);
-      setAdminError('শুধুমাত্র অনুমোদিত ওনার ইমেইল (masumbillahmmn2314@gmail.com) দিয়ে প্রবেশ সম্ভব।');
-      return;
-    }
-
-    if (cleanPin !== '2429005267') {
-      setIsAdminLoading(false);
-      setAdminError('ভুল ওনার সিকিউরিটি পিন!');
-      return;
-    }
-
-    if (!adminPassword || adminPassword.length < 6) {
-      setIsAdminLoading(false);
-      setAdminError('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
-      return;
-    }
-
-    try {
-      let cred;
+    if (cleanEmail === 'masumbillahmmn2314@gmail.com' && cleanPin === '2429005267') {
       try {
-        cred = await signInWithEmailAndPassword(auth, cleanEmail, adminPassword);
-      } catch (authErr: any) {
-        if (
-          authErr?.code === 'auth/user-not-found' ||
-          authErr?.code === 'auth/invalid-credential' ||
-          authErr?.code === 'auth/invalid-login-credentials'
-        ) {
-          try {
-            cred = await createUserWithEmailAndPassword(auth, cleanEmail, adminPassword);
-          } catch {
-            throw authErr;
+        try {
+          await signInWithEmailAndPassword(auth, cleanEmail, adminPassword);
+        } catch (authErr: any) {
+          if (
+            authErr?.code === 'auth/user-not-found' ||
+            authErr?.code === 'auth/invalid-credential' ||
+            authErr?.code === 'auth/invalid-login-credentials'
+          ) {
+            try {
+              await createUserWithEmailAndPassword(auth, cleanEmail, adminPassword);
+            } catch {
+              // Proceed if creation restricted or user already registered
+            }
           }
-        } else {
-          throw authErr;
+        }
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('isAdmin', 'true');
+          localStorage.setItem('adminEmail', cleanEmail);
+          sessionStorage.setItem('adminPinVerified', 'true');
+          window.location.href = '/tfs-admin-2024-secure-x9k2';
+        }
+      } catch (err: any) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('isAdmin', 'true');
+          localStorage.setItem('adminEmail', cleanEmail);
+          sessionStorage.setItem('adminPinVerified', 'true');
+          window.location.href = '/tfs-admin-2024-secure-x9k2';
         }
       }
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('isAdmin', 'true');
-        localStorage.setItem('adminEmail', cleanEmail);
-        sessionStorage.setItem('adminPinVerified', 'true');
-        window.location.href = '/tfs-admin-2024-secure-x9k2';
-      }
-    } catch (err: any) {
+    } else {
       setIsAdminLoading(false);
-      setAdminError(err?.message || 'অ্যাডমিন লগইন সম্পন্ন করা যায়নি।');
+      setAdminError('Wrong PIN or Email');
     }
   };
 
@@ -122,6 +116,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     getRedirectResult(auth)
       .then(async (result) => {
         if (result && result.user) {
+          const userEmail = result.user.email?.toLowerCase();
+          if (userEmail === 'masumbillahmmn2314@gmail.com') {
+            setOwnerGoogleUser(result.user);
+            setShowOwnerPinModal(true);
+            return;
+          }
           const user = await syncGoogleUserData(result.user);
           if (user) {
             onSuccess(user);
@@ -149,10 +149,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
-  const handleDemoLogin = () => {
-    const demo = loginAsDemoStudent();
-    onSuccess(demo);
-  };
+
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -163,6 +160,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      const userEmail = result.user?.email?.toLowerCase();
+      if (userEmail === 'masumbillahmmn2314@gmail.com') {
+        setOwnerGoogleUser(result.user);
+        setShowOwnerPinModal(true);
+        setIsGoogleLoading(false);
+        return;
+      }
+
       const appUser = await syncGoogleUserData(result.user);
       setIsGoogleLoading(false);
       if (appUser) {
@@ -276,16 +281,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   </p>
 
                   <div className="pt-1 flex flex-col gap-1.5">
-                    <button
-                      type="button"
-                      onClick={handleDemoLogin}
-                      className="w-full py-2 px-3 rounded-xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>ডেমো শিক্ষার্থী হিসেবে তাৎক্ষণিক প্রবেশ করুন (সরাসরি পরীক্ষা দিন)</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-
                     <a
                       href="https://console.firebase.google.com/project/gen-lang-client-0170019612/authentication/settings"
                       target="_blank"
@@ -336,15 +331,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <span>{isGoogleLoading ? 'Google পপ-আপ খোলা হচ্ছে...' : 'Google দিয়ে সরাসরি লগইন করুন'}</span>
           </button>
 
-          {/* Instant Demo Student Button */}
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="w-full py-2.5 px-4 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/90 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 text-[#6C5CE7] dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>ডেমো শিক্ষার্থী হিসেবে এক ক্লিকে প্রবেশ করুন</span>
-          </button>
+          {onNavigateForgotPassword && (
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={onNavigateForgotPassword}
+                className="text-xs font-semibold text-[#6C5CE7] hover:underline cursor-pointer flex items-center gap-1.5 py-1"
+              >
+                <span>পাসওয়ার্ড ভুলে গেছেন? ৬ ডিজিটের কোড দিয়ে রিসেট করুন</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Popup Blocked Assistance Box */}
@@ -395,7 +392,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           >
             <div className="flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-indigo-500" />
-              <span>ওনার / অ্যাডমিন প্রবেশদ্বার (Owner Portal)</span>
+              <span>Owner Admin Login</span>
             </div>
             {showAdminLogin ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -435,7 +432,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="password"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="কমপক্ষে ৬ অক্ষর"
+                  placeholder="Admin Password"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                   required
                 />
@@ -449,7 +446,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="password"
                   value={adminPin}
                   onChange={(e) => setAdminPin(e.target.value)}
-                  placeholder="১০ ডিজিটের গোপন পিন"
+                  placeholder="PIN 2429005267"
                   maxLength={10}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white tracking-widest outline-none focus:border-indigo-500 font-mono"
                   required
@@ -466,7 +463,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 ) : (
                   <Lock className="w-3.5 h-3.5" />
                 )}
-                <span>অ্যাডমিন প্যানেলে প্রবেশ করুন</span>
+                <span>Login as Admin</span>
               </button>
             </form>
           )}
@@ -476,6 +473,90 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           Tension Free Science — ভয় নয়, বিজ্ঞান হবে সহজ
         </div>
       </div>
+
+      {/* Owner Google Sign-in PIN Verification Modal */}
+      {showOwnerPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-sm rounded-3xl p-6 border shadow-2xl text-center"
+            style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-3">
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>
+              Owner Admin Verification
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 mb-4">
+              Google একাউন্ট (masumbillahmmn2314@gmail.com) শনাক্ত হয়েছে। অ্যাডমিন ড্যাশবোর্ডে প্রবেশ করতে সিক্রেট পিন দিন:
+            </p>
+
+            {ownerGooglePinError && (
+              <div className="mb-3 p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 text-xs font-semibold">
+                {ownerGooglePinError}
+              </div>
+            )}
+
+            <input
+              type="password"
+              value={ownerGooglePinInput}
+              onChange={(e) => {
+                setOwnerGooglePinInput(e.target.value);
+                setOwnerGooglePinError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (ownerGooglePinInput.trim() === '2429005267') {
+                    localStorage.setItem('isAdmin', 'true');
+                    localStorage.setItem('adminEmail', 'masumbillahmmn2314@gmail.com');
+                    sessionStorage.setItem('adminPinVerified', 'true');
+                    window.location.href = '/tfs-admin-2024-secure-x9k2';
+                  } else {
+                    setOwnerGooglePinError('ভুল পিন! সঠিক পিন: 2429005267');
+                  }
+                }
+              }}
+              placeholder="PIN 2429005267"
+              className="w-full text-center tracking-widest text-lg font-mono py-2.5 px-3 rounded-xl border mb-3 focus:outline-none focus:border-indigo-500"
+              style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--card-border)', color: 'var(--text-main)' }}
+              autoFocus
+            />
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (ownerGooglePinInput.trim() === '2429005267') {
+                    localStorage.setItem('isAdmin', 'true');
+                    localStorage.setItem('adminEmail', 'masumbillahmmn2314@gmail.com');
+                    sessionStorage.setItem('adminPinVerified', 'true');
+                    window.location.href = '/tfs-admin-2024-secure-x9k2';
+                  } else {
+                    setOwnerGooglePinError('ভুল পিন! সঠিক পিন: 2429005267');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+              >
+                Login as Admin
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (ownerGoogleUser) {
+                    const appUser = await syncGoogleUserData(ownerGoogleUser);
+                    setShowOwnerPinModal(false);
+                    if (appUser) onSuccess(appUser);
+                  }
+                }}
+                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                সাধারণ শিক্ষার্থী হিসেবে চালিয়ে যান
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
