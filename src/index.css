@@ -1,0 +1,181 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+@font-face {
+  font-family: 'Hind Siliguri';
+  src: url('/fonts/HindSiliguri-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Hind Siliguri';
+  src: url('/fonts/HindSiliguri-Regular.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Hind Siliguri';
+  src: url('/fonts/HindSiliguri-Bold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Hind Siliguri';
+  src: url('/fonts/HindSiliguri-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Theme Design System Variables */
+:root, .theme-light {
+  --bg: #F8F9FF;
+  --nav-bg: rgba(255, 255, 255, 0.95);
+  --card: #FFFFFF;
+  --card-border: #E2E8F0;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --primary: #6C5CE7;
+  --primary-hover: #5A4ADF;
+  --primary-light: #F0EDFF;
+  --badge-bg: #EEF2FF;
+  --hero-gradient: linear-gradient(180deg, rgba(238, 242, 255, 0.8) 0%, rgba(248, 249, 255, 0.4) 100%);
+  --modal-overlay: rgba(15, 23, 42, 0.6);
+}
+
+.theme-dark {
+  --bg: #0F172A;
+  --nav-bg: rgba(30, 41, 59, 0.95);
+  --card: #1E293B;
+  --card-border: #334155;
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --primary: #818CF8;
+  --primary-hover: #6366F1;
+  --primary-light: #312E81;
+  --badge-bg: #1E1B4B;
+  --hero-gradient: linear-gradient(180deg, rgba(30, 27, 75, 0.5) 0%, rgba(15, 23, 42, 0.9) 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.8);
+}
+
+.theme-nature {
+  --bg: #F0FDF4;
+  --nav-bg: rgba(255, 255, 255, 0.95);
+  --card: #FFFFFF;
+  --card-border: #DCFCE7;
+  --text-main: #14532D;
+  --text-muted: #4B6F57;
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-light: #D1FAE5;
+  --badge-bg: #ECFDF5;
+  --hero-gradient: linear-gradient(180deg, rgba(209, 250, 229, 0.6) 0%, rgba(240, 253, 244, 0.3) 100%);
+  --modal-overlay: rgba(20, 83, 45, 0.6);
+}
+
+.theme-ocean {
+  --bg: #EFF6FF;
+  --nav-bg: rgba(255, 255, 255, 0.95);
+  --card: #FFFFFF;
+  --card-border: #DBEAFE;
+  --text-main: #1E3A8A;
+  --text-muted: #475569;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-light: #DBEAFE;
+  --badge-bg: #EFF6FF;
+  --hero-gradient: linear-gradient(180deg, rgba(219, 234, 254, 0.6) 0%, rgba(239, 246, 255, 0.3) 100%);
+  --modal-overlay: rgba(30, 58, 138, 0.6);
+}
+
+.theme-sunset {
+  --bg: #FFF7ED;
+  --nav-bg: rgba(255, 255, 255, 0.95);
+  --card: #FFFFFF;
+  --card-border: #FFEDD5;
+  --text-main: #7C2D12;
+  --text-muted: #9A3412;
+  --primary: #EA580C;
+  --primary-hover: #C2410C;
+  --primary-light: #FFEDD5;
+  --badge-bg: #FFF1E6;
+  --hero-gradient: linear-gradient(180deg, rgba(255, 237, 213, 0.7) 0%, rgba(255, 247, 237, 0.3) 100%);
+  --modal-overlay: rgba(124, 45, 18, 0.6);
+}
+
+.theme-tfs {
+  --bg: #1F1947;
+  --nav-bg: rgba(36, 29, 84, 0.95);
+  --card: #2C2366;
+  --card-border: #443799;
+  --text-main: #F5F3FF;
+  --text-muted: #C4B5FD;
+  --primary: #A78BFA;
+  --primary-hover: #C4B5FD;
+  --primary-light: #4C3C9C;
+  --badge-bg: #372A78;
+  --hero-gradient: linear-gradient(180deg, rgba(76, 60, 156, 0.5) 0%, rgba(31, 25, 71, 0.9) 100%);
+  --modal-overlay: rgba(15, 12, 36, 0.85);
+}
+
+@layer base {
+  * {
+    font-family: 'Hind Siliguri', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Hind Siliguri', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg);
+    color: var(--text-main);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    overflow-x: hidden;
+  }
+}
+
+/* Reusable Theme-aware utility classes */
+.tfs-bg {
+  background-color: var(--bg);
+}
+.tfs-card {
+  background-color: var(--card);
+  border-color: var(--card-border);
+  color: var(--text-main);
+}
+.tfs-text {
+  color: var(--text-main);
+}
+.tfs-muted {
+  color: var(--text-muted);
+}
+.tfs-primary-btn {
+  background-color: var(--primary);
+  color: #FFFFFF;
+}
+.tfs-primary-btn:hover {
+  background-color: var(--primary-hover);
+}
+.tfs-border {
+  border-color: var(--card-border);
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

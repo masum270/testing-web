@@ -1,0 +1,6 @@
+{
+  "name": "Tension Free Science",
+  "description": "ভয় নয়, বিজ্ঞান হবে সহজ — নবম-দশম শ্রেণির লাইভ এমসিকিউ, ভিডিও ক্লাস ও পূর্ণাঙ্গ বিজ্ঞান প্রস্তুতি প্ল্যাটফর্ম।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

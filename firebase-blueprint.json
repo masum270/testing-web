@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and statistics for Class 9-10 science students",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth user ID" },
+        "name": { "type": "string", "maxLength": 100, "description": "Student full name" },
+        "email": { "type": "string", "maxLength": 150, "description": "Student email address" },
+        "studentClass": { "type": "string", "enum": ["9", "10"], "description": "Grade 9 or 10" },
+        "school": { "type": "string", "maxLength": 150, "description": "School name" },
+        "district": { "type": "string", "maxLength": 60, "description": "District" },
+        "totalXP": { "type": "number", "description": "Total experience points" },
+        "level": { "type": "number", "description": "Calculated level" },
+        "totalExams": { "type": "number", "description": "Number of exams completed" },
+        "totalCorrect": { "type": "number", "description": "Total correct MCQ answers" },
+        "totalAttempted": { "type": "number", "description": "Total MCQ questions attempted" },
+        "avatar": { "type": "string", "maxLength": 500, "description": "Avatar URL" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "name", "totalXP", "level"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Authorized staff and administrator profile",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Team member email" },
+        "name": { "type": "string", "description": "Team member full name" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "moderator"], "description": "Role level" },
+        "addedBy": { "type": "string", "description": "Email of admin who added" },
+        "addedAt": { "type": "string", "description": "Timestamp added" },
+        "status": { "type": "string", "enum": ["active", "suspended"], "description": "Account status" },
+        "permissions": { "type": "object", "description": "Fine-grained feature flags" }
+      },
+      "required": ["email", "name", "role", "status"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "MCQ Question item in question bank",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Question ID" },
+        "subject": { "type": "string", "description": "Subject name" },
+        "chapter": { "type": "string", "description": "Chapter name" },
+        "question": { "type": "string", "description": "Question text in Bengali" },
+        "options": { "type": "array", "description": "Four options" },
+        "correctIndex": { "type": "number", "description": "Index of correct option" },
+        "explanation": { "type": "string", "description": "Explanation" },
+        "difficulty": { "type": "string", "description": "easy, medium, or hard" },
+        "imageUrl": { "type": "string", "description": "Optional illustration URL" }
+      },
+      "required": ["id", "subject", "chapter", "question", "options", "correctIndex"]
+    },
+    "ExamSession": {
+      "title": "ExamSession",
+      "description": "Live student active exam session tracking",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "description": "Exam session ID" },
+        "userId": { "type": "string", "description": "Student user ID" },
+        "userEmail": { "type": "string", "description": "Student email" },
+        "userName": { "type": "string", "description": "Student name" },
+        "photoURL": { "type": "string", "description": "Student avatar" },
+        "subject": { "type": "string", "description": "Exam subject" },
+        "chapter": { "type": "string", "description": "Exam chapter" },
+        "startTime": { "type": "string", "description": "Start timestamp" },
+        "lastActiveTime": { "type": "string", "description": "Heartbeat timestamp" },
+        "status": { "type": "string", "enum": ["live", "finished", "abandoned"], "description": "Current status" },
+        "totalQuestions": { "type": "number", "description": "Total questions" },
+        "answeredCount": { "type": "number", "description": "Questions answered" },
+        "currentQuestionIndex": { "type": "number", "description": "Current position" },
+        "progressPercent": { "type": "number", "description": "Progress percentage" },
+        "device": { "type": "string", "description": "Client device" }
+      },
+      "required": ["sessionId", "userId", "subject", "status"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Public and recorded exam result record for leaderboard",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Result ID" },
+        "userId": { "type": "string", "description": "Student ID" },
+        "userEmail": { "type": "string", "description": "Student email" },
+        "userName": { "type": "string", "description": "Student display name" },
+        "subject": { "type": "string", "description": "Subject name" },
+        "chapter": { "type": "string", "description": "Chapter name" },
+        "score": { "type": "number", "description": "Score" },
+        "totalMarks": { "type": "number", "description": "Total marks" },
+        "correctCount": { "type": "number", "description": "Correct answers" },
+        "wrongCount": { "type": "number", "description": "Wrong answers" },
+        "timeTaken": { "type": "number", "description": "Time in seconds" },
+        "submittedAt": { "type": "string", "description": "Timestamp" },
+        "rank": { "type": "number", "description": "Calculated rank" }
+      },
+      "required": ["id", "userId", "userName", "subject", "score", "totalMarks", "submittedAt"]
+    },
+    "AdminLog": {
+      "title": "AdminLog",
+      "description": "Audit trails for admin modifications",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "description": "Operation performed" },
+        "performedBy": { "type": "string", "description": "Email of admin" },
+        "details": { "type": "string", "description": "Contextual details" },
+        "timestamp": { "type": "string", "description": "Log timestamp" }
+      },
+      "required": ["action", "performedBy", "timestamp"]
+    },
+    "SecurityLog": {
+      "title": "SecurityLog",
+      "description": "Security events and access attempt logs",
+      "type": "object",
+      "properties": {
+        "event": { "type": "string", "description": "Security event description" },
+        "attemptedBy": { "type": "string", "description": "Email or IP" },
+        "details": { "type": "string", "description": "Details" },
+        "timestamp": { "type": "string", "description": "Timestamp" }
+      },
+      "required": ["event", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Student profile documents"
+    },
+    "/team_members/{email}": {
+      "schema": "TeamMember",
+      "description": "Administrators and authorized staff"
+    },
+    "/questions/{questionId}": {
+      "schema": "Question",
+      "description": "Live question bank collection"
+    },
+    "/exam_sessions/{sessionId}": {
+      "schema": "ExamSession",
+      "description": "Live student active exam tracker"
+    },
+    "/exam_results/{resultId}": {
+      "schema": "ExamResult",
+      "description": "Public exam results for live leaderboard"
+    },
+    "/admin_logs/{logId}": {
+      "schema": "AdminLog",
+      "description": "Administrative actions audit trail"
+    },
+    "/security_logs/{logId}": {
+      "schema": "SecurityLog",
+      "description": "Security incident and access logs"
+    }
+  }
+}
