@@ -1,5 +1,6 @@
 import { UserProfile, ExamResult } from '../types/quiz.js';
 import { calculateLevel } from './quizLogic.js';
+import { calcLevel } from '../lib/levelSystem.js';
 import { updateUserExamStats, getCurrentUser } from './auth.js';
 
 const STORAGE_KEY = 'class910_livemcq_user_v1';
@@ -10,7 +11,7 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
   school: '',
   avatar: '', // empty, no default image
   totalXP: 0,
-  level: 0,
+  level: 1,
   totalExams: 0,
   totalCorrect: 0,
   totalAttempted: 0,
@@ -38,7 +39,7 @@ export function getUserProfile(): UserProfile {
     return {
       ...DEFAULT_USER_PROFILE,
       ...parsed,
-      level: calculateLevel(parsed.totalXP || 0)
+      level: Math.max(1, calculateLevel(parsed.totalXP || 0))
     };
   } catch (e) {
     console.error('Error reading user profile from localStorage:', e);
@@ -49,7 +50,7 @@ export function getUserProfile(): UserProfile {
 export function saveUserProfile(profile: UserProfile, latestExam?: ExamResult): void {
   if (typeof window === 'undefined') return;
   try {
-    profile.level = calculateLevel(profile.totalXP);
+    profile.level = calcLevel(profile.totalXP);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
 
     // Also sync with tfs_users
@@ -83,7 +84,8 @@ export function recordExamCompletion(result: ExamResult): UserProfile {
     }
   });
 
-  const updatedXP = current.totalXP + result.scoreXP;
+  const xpEarned = result.xpEarned ?? 100;
+  const updatedXP = current.totalXP + xpEarned;
   const updatedTotalExams = current.totalExams + 1;
   const updatedTotalCorrect = current.totalCorrect + result.correctCount;
   const updatedTotalAttempted = current.totalAttempted + (result.totalQuestions - result.skippedCount);
@@ -93,7 +95,7 @@ export function recordExamCompletion(result: ExamResult): UserProfile {
   const updated: UserProfile = {
     ...current,
     totalXP: updatedXP,
-    level: calculateLevel(updatedXP),
+    level: calcLevel(updatedXP),
     totalExams: updatedTotalExams,
     totalCorrect: updatedTotalCorrect,
     totalAttempted: updatedTotalAttempted,

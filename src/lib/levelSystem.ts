@@ -17,6 +17,7 @@ export const LEVEL_XP: Record<number, number> = {
 };
 
 export const LEVEL_DETAILS: { [lvl: number]: { title: string; badge: string; color: string } } = {
+  0: { title: 'নবীন শিক্ষার্থী (Newbie)', badge: '🌱', color: 'from-slate-500 to-emerald-600' },
   1: { title: 'নবীন বিজ্ঞানী (Rookie)', badge: '🌱', color: 'from-emerald-500 to-teal-600' },
   2: { title: 'অনুসন্ধানী শিক্ষার্থী (Explorer)', badge: '🔭', color: 'from-cyan-500 to-blue-600' },
   3: { title: 'দক্ষ গবেষক (Researcher)', badge: '🧪', color: 'from-blue-600 to-indigo-600' },
@@ -29,23 +30,23 @@ export const LEVEL_DETAILS: { [lvl: number]: { title: string; badge: string; col
 export const EXAM_XP_REWARD = 100;
 
 export function calcLevel(xp: number): number {
-  if (!xp || xp < LEVEL_XP[1]) return 1;
-  if (xp < LEVEL_XP[2]) return 2;
-  if (xp < LEVEL_XP[3]) return 3;
-  if (xp < LEVEL_XP[4]) return 4;
-  if (xp < LEVEL_XP[5]) return 5;
-  if (xp < LEVEL_XP[6]) return 6;
-  return 7;
+  if (xp >= 10000) return 7;
+  if (xp >= 7000) return 6;
+  if (xp >= 5000) return 5;
+  if (xp >= 3500) return 4;
+  if (xp >= 2200) return 3;
+  if (xp >= 1000) return 2;
+  return 1;
 }
 
 export function getNextLevelXP(currentLevel: number): number {
-  if (currentLevel >= 7) return LEVEL_XP[7];
-  return LEVEL_XP[currentLevel] || 400;
+  if (currentLevel >= 7) return 10000;
+  return LEVEL_XP[currentLevel + 1] || 400;
 }
 
 export function getPreviousLevelXP(currentLevel: number): number {
   if (currentLevel <= 1) return 0;
-  return LEVEL_XP[currentLevel - 1] || 0;
+  return LEVEL_XP[currentLevel] || 0;
 }
 
 export function getLevelProgress(xp: number): {
@@ -58,11 +59,11 @@ export function getLevelProgress(xp: number): {
   badge: string;
 } {
   const currentLevel = calcLevel(xp);
-  const prevXP = getPreviousLevelXP(currentLevel);
-  const nextXP = getNextLevelXP(currentLevel);
+  const prevXP = currentLevel <= 1 ? 0 : (LEVEL_XP[currentLevel] || 0);
+  const nextXP = currentLevel >= 7 ? 10000 : (LEVEL_XP[currentLevel + 1] || 400);
   const totalForCurrentTier = Math.max(1, nextXP - prevXP);
   const earnedInCurrentTier = Math.max(0, xp - prevXP);
-  const percentage = Math.min(100, Math.round((earnedInCurrentTier / totalForCurrentTier) * 100));
+  const percentage = currentLevel >= 7 ? 100 : Math.min(100, Math.round((earnedInCurrentTier / totalForCurrentTier) * 100));
   const neededXP = Math.max(0, nextXP - xp);
   const details = LEVEL_DETAILS[currentLevel] || LEVEL_DETAILS[1];
 

@@ -38,6 +38,9 @@ export interface ExamResult {
   skippedCount: number;
   accuracy: number;
   scoreXP: number;
+  xpEarned?: number;
+  newLevel?: number;
+  isLevelUp?: boolean;
   timeTakenSeconds: number;
   rank?: number;
   totalParticipants?: number;

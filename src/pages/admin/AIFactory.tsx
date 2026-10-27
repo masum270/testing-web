@@ -185,59 +185,67 @@ export const AIFactory: React.FC = () => {
 
   // 1. Load & Sync AI Control Config from Firestore
   useEffect(() => {
-    const unsubControl = onSnapshot(doc(db, 'ai_control', 'config'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (typeof data.isFactoryActive === 'boolean') {
-          setIsFactoryActive(data.isFactoryActive);
+    const unsubControl = onSnapshot(
+      doc(db, 'ai_control', 'config'),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (typeof data.isFactoryActive === 'boolean') {
+            setIsFactoryActive(data.isFactoryActive);
+          }
+          if (typeof data.autoDailyMode === 'boolean') {
+            setAutoDailyMode(data.autoDailyMode);
+          }
+          if (data.dailyTargetPerChapter) {
+            setDailyTargetPerChapter(data.dailyTargetPerChapter);
+          }
+          if (data.geminiKey) {
+            saveProviderKey('gemini', data.geminiKey);
+            setKeysInput((prev) => ({ ...prev, gemini: data.geminiKey }));
+          }
+          if (data.groqKey) {
+            saveProviderKey('groq', data.groqKey);
+            setKeysInput((prev) => ({ ...prev, groq: data.groqKey }));
+          }
+          if (data.deepseekKey) {
+            saveProviderKey('deepseek', data.deepseekKey);
+            setKeysInput((prev) => ({ ...prev, deepseek: data.deepseekKey }));
+          }
+        } else {
+          // Pre-create initial control document
+          setDoc(doc(db, 'ai_control', 'config'), {
+            isFactoryActive: true,
+            autoDailyMode: true,
+            dailyTargetPerChapter: 250,
+            geminiKey: AI_PROVIDERS.gemini.key,
+            groqKey: AI_PROVIDERS.groq.key,
+            deepseekKey: AI_PROVIDERS.deepseek.key,
+            updatedAt: serverTimestamp()
+          }).catch((err) => console.warn('Could not bootstrap ai_control:', err));
         }
-        if (typeof data.autoDailyMode === 'boolean') {
-          setAutoDailyMode(data.autoDailyMode);
-        }
-        if (data.dailyTargetPerChapter) {
-          setDailyTargetPerChapter(data.dailyTargetPerChapter);
-        }
-        if (data.geminiKey) {
-          saveProviderKey('gemini', data.geminiKey);
-          setKeysInput((prev) => ({ ...prev, gemini: data.geminiKey }));
-        }
-        if (data.groqKey) {
-          saveProviderKey('groq', data.groqKey);
-          setKeysInput((prev) => ({ ...prev, groq: data.groqKey }));
-        }
-        if (data.deepseekKey) {
-          saveProviderKey('deepseek', data.deepseekKey);
-          setKeysInput((prev) => ({ ...prev, deepseek: data.deepseekKey }));
-        }
-      } else {
-        // Pre-create initial control document
-        setDoc(doc(db, 'ai_control', 'config'), {
-          isFactoryActive: true,
-          autoDailyMode: true,
-          dailyTargetPerChapter: 250,
-          geminiKey: AI_PROVIDERS.gemini.key,
-          groqKey: AI_PROVIDERS.groq.key,
-          deepseekKey: AI_PROVIDERS.deepseek.key,
-          updatedAt: serverTimestamp()
-        }).catch((err) => console.warn('Could not bootstrap ai_control:', err));
-      }
-    });
+      },
+      (err) => console.warn('ai_control snapshot notice:', err)
+    );
 
     // 2. Load Prompts Config from Firestore
-    const unsubPrompts = onSnapshot(collection(db, 'ai_prompts_config'), (snap) => {
-      if (!snap.empty) {
-        const list: PromptConfigItem[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as any)
-        }));
-        setPromptConfigs(list);
-      } else {
-        // Pre-seed default prompts
-        DEFAULT_PROMPTS.forEach((dp) => {
-          setDoc(doc(db, 'ai_prompts_config', dp.id), dp).catch(() => {});
-        });
-      }
-    });
+    const unsubPrompts = onSnapshot(
+      collection(db, 'ai_prompts_config'),
+      (snap) => {
+        if (!snap.empty) {
+          const list: PromptConfigItem[] = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as any)
+          }));
+          setPromptConfigs(list);
+        } else {
+          // Pre-seed default prompts
+          DEFAULT_PROMPTS.forEach((dp) => {
+            setDoc(doc(db, 'ai_prompts_config', dp.id), dp).catch(() => {});
+          });
+        }
+      },
+      (err) => console.warn('ai_prompts_config snapshot notice:', err)
+    );
 
     // 3. Load Questions Queue
     const qQueue = query(collection(db, 'ai_questions_queue'), orderBy('createdAt', 'desc'), limit(150));
@@ -254,11 +262,15 @@ export const AIFactory: React.FC = () => {
     );
 
     // 4. Load Today's Daily Stats
-    const unsubStats = onSnapshot(doc(db, 'ai_daily_stats', today), (snap) => {
-      if (snap.exists()) {
-        setDailyStats(snap.data());
-      }
-    });
+    const unsubStats = onSnapshot(
+      doc(db, 'ai_daily_stats', today),
+      (snap) => {
+        if (snap.exists()) {
+          setDailyStats(snap.data());
+        }
+      },
+      (err) => console.warn('ai_daily_stats snapshot notice:', err)
+    );
 
     // 5. Load Generation Logs
     const qLogs = query(collection(db, 'ai_generation_logs'), orderBy('timestamp', 'desc'), limit(60));
@@ -414,8 +426,15 @@ export const AIFactory: React.FC = () => {
       ]);
       setUsageState(getTodayUsage());
     } catch (err: any) {
+      const isPerm =
+        err?.message?.toLowerCase().includes('permission') ||
+        err?.code === 'permission-denied' ||
+        err?.message?.includes('Missing or insufficient permissions');
+      const errorMsg = isPerm
+        ? 'Firestore Rules Publish করুন - Part 1 এর rules (Firebase Console > Firestore > Rules)'
+        : err.message;
       setTerminalLogs((prev) => [
-        `[${new Date().toLocaleTimeString()}] ❌ জেনারেশন ব্যর্থ: ${err.message}`,
+        `[${new Date().toLocaleTimeString()}] ❌ জেনারেশন ব্যর্থ: ${errorMsg}`,
         ...prev
       ]);
     } finally {

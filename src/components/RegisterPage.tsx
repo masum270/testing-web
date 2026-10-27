@@ -9,8 +9,7 @@ import {
 import {
   registerUser,
   syncGoogleUserData,
-  resendVerificationEmail,
-  loginAsDemoStudent
+  resendVerificationEmail
 } from '../utils/auth.js';
 import { AuthUser } from '../types/auth.js';
 import {
@@ -101,11 +100,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2500);
     }
-  };
-
-  const handleDemoLogin = () => {
-    const demo = loginAsDemoStudent();
-    onSuccess(demo);
   };
 
   const handleGoogleLogin = async () => {
@@ -360,15 +354,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   </p>
 
                   <div className="pt-1 flex flex-col gap-1.5">
-                    <button
-                      type="button"
-                      onClick={handleDemoLogin}
-                      className="w-full py-2 px-3 rounded-xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>ডেমো শিক্ষার্থী হিসেবে সরাসরি অ্যাপে প্রবেশ করুন</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
 
                     <a
                       href="https://console.firebase.google.com/project/gen-lang-client-0170019612/authentication/settings"
@@ -572,16 +557,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             </svg>
           )}
           <span>{isGoogleLoading ? 'Google পপ-আপ খোলা হচ্ছে...' : 'Google দিয়ে সরাসরি একাউন্ট খুলুন'}</span>
-        </button>
-
-        {/* Instant Demo Student Button */}
-        <button
-          type="button"
-          onClick={handleDemoLogin}
-          className="w-full mt-2.5 py-2.5 px-4 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/90 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 text-[#6C5CE7] dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span>ডেমো শিক্ষার্থী হিসেবে এক ক্লিকে প্রবেশ করুন</span>
         </button>
 
         {/* Popup Blocked Assistance Box */}

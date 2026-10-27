@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { subscribeExamResults } from '../services/adminService.js';
+import { db, collection, query, orderBy, onSnapshot } from '../firebase.js';
+import { getLocalResults } from '../services/adminService.js';
 import { ExamResultDoc } from '../types/admin.js';
 import { AuthUser } from '../types/auth.js';
 import { SUBJECTS } from '../data/subjects.js';
 import { toBengaliNumber, formatTimer } from '../utils/quizLogic.js';
+import { calcLevel, LEVEL_DETAILS } from '../lib/levelSystem.js';
 import {
   Trophy,
   Crown,
@@ -17,7 +19,8 @@ import {
   CheckCircle2,
   Sparkles,
   Share2,
-  ChevronRight
+  ChevronRight,
+  Award
 } from 'lucide-react';
 
 interface LeaderboardPageProps {
@@ -42,16 +45,99 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   const [copiedShare, setCopiedShare] = useState(false);
   const pageSize = 15;
 
-  // Real-time listener for Firestore exam_results
+  // Real-time listener for Firestore exam_results (Public, with orderBy & unordered fallback)
   useEffect(() => {
     setIsLoading(true);
-    const unsubscribe = subscribeExamResults((fetched) => {
-      setResults(fetched);
-      setIsLoading(false);
-    }, selectedSubject === 'all' ? undefined : selectedSubject);
+    let isMounted = true;
+    let unsubPrimary: (() => void) | null = null;
+    let unsubFallback: (() => void) | null = null;
 
-    return () => unsubscribe();
-  }, [selectedSubject]);
+    const mapDocs = (snap: any): ExamResultDoc[] => {
+      const list: ExamResultDoc[] = [];
+      snap.forEach((d: any) => {
+        const data = d.data() as any;
+        list.push({
+          id: d.id,
+          userId: data.uid || data.userId || d.id,
+          userEmail: data.email || data.userEmail || '',
+          userName: data.displayName || data.userName || 'শিক্ষার্থী',
+          photoURL: data.photoURL,
+          subject: data.subject || 'সাধারণ বিজ্ঞান',
+          chapter: data.chapter || 'সকল অধ্যায়',
+          score: data.score ?? 0,
+          totalMarks: data.totalQuestions || data.totalMarks || 10,
+          correctCount: data.correctCount ?? 0,
+          wrongCount: data.wrongCount ?? 0,
+          timeTaken: data.timeTaken ?? 60,
+          submittedAt:
+            data.submittedAt ||
+            (data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date(data.timestamp || Date.now()).toISOString()),
+          date: data.date || new Date().toISOString().split('T')[0],
+          xpEarned: data.xpEarned ?? 100,
+          rank: 1
+        });
+      });
+      return list;
+    };
+
+    try {
+      const q = query(collection(db, 'exam_results'), orderBy('score', 'desc'));
+      unsubPrimary = onSnapshot(
+        q,
+        (snap) => {
+          if (!isMounted) return;
+          const list = mapDocs(snap);
+          setResults(list);
+          setIsLoading(false);
+        },
+        (err) => {
+          if (!isMounted) return;
+          console.warn('Leaderboard orderBy query failed, falling back to unordered query:', err);
+          unsubFallback = onSnapshot(
+            collection(db, 'exam_results'),
+            (snap2) => {
+              if (!isMounted) return;
+              const list = mapDocs(snap2);
+              list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || (a.timeTaken ?? 0) - (b.timeTaken ?? 0));
+              setResults(list);
+              setIsLoading(false);
+            },
+            (err2) => {
+              if (!isMounted) return;
+              console.warn('Leaderboard unordered query fallback failed:', err2);
+              setResults(getLocalResults());
+              setIsLoading(false);
+            }
+          );
+        }
+      );
+    } catch {
+      if (isMounted) {
+        unsubFallback = onSnapshot(
+          collection(db, 'exam_results'),
+          (snap2) => {
+            if (!isMounted) return;
+            const list = mapDocs(snap2);
+            list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || (a.timeTaken ?? 0) - (b.timeTaken ?? 0));
+            setResults(list);
+            setIsLoading(false);
+          },
+          (err) => {
+            if (!isMounted) return;
+            console.warn('Leaderboard catch fallback notice:', err);
+            setResults(getLocalResults());
+            setIsLoading(false);
+          }
+        );
+      }
+    }
+
+    return () => {
+      isMounted = false;
+      if (unsubPrimary) unsubPrimary();
+      if (unsubFallback) unsubFallback();
+    };
+  }, []);
 
   // Read URL query param on mount if any
   useEffect(() => {
@@ -64,23 +150,29 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     }
   }, []);
 
-  // Filter by timeframe and search query
+  // Filter by subject, timeframe, and search query
   const filteredResults = useMemo(() => {
     let list = [...results];
 
+    // Subject Filter
+    if (selectedSubject !== 'all' && selectedSubject !== 'সকল') {
+      list = list.filter((r) => r.subject?.trim() === selectedSubject.trim());
+    }
+
     // Timeframe filter
     const now = Date.now();
+    const todayStr = new Date().toISOString().split('T')[0];
     if (selectedTimeframe === 'today') {
-      const oneDay = 24 * 60 * 60 * 1000;
       list = list.filter((r) => {
+        if (r.date && r.date === todayStr) return true;
         const time = new Date(r.submittedAt).getTime();
-        return now - time <= oneDay;
+        return !isNaN(time) && now - time <= 24 * 60 * 60 * 1000;
       });
     } else if (selectedTimeframe === 'week') {
       const oneWeek = 7 * 24 * 60 * 60 * 1000;
       list = list.filter((r) => {
         const time = new Date(r.submittedAt).getTime();
-        return now - time <= oneWeek;
+        return !isNaN(time) && now - time <= oneWeek;
       });
     }
 
@@ -89,18 +181,21 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(
         (r) =>
-          r.userName.toLowerCase().includes(q) ||
-          r.userEmail.toLowerCase().includes(q) ||
-          r.chapter.toLowerCase().includes(q)
+          r.userName?.toLowerCase().includes(q) ||
+          r.userEmail?.toLowerCase().includes(q) ||
+          r.chapter?.toLowerCase().includes(q)
       );
     }
 
-    // Recalculate display rank
+    // Sort descending by score, ascending by timeTaken
+    list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || (a.timeTaken ?? 0) - (b.timeTaken ?? 0));
+
+    // Recalculate rank
     return list.map((item, idx) => ({
       ...item,
       rank: idx + 1
     }));
-  }, [results, selectedTimeframe, searchQuery]);
+  }, [results, selectedSubject, selectedTimeframe, searchQuery]);
 
   const top3 = filteredResults.slice(0, 3);
   const totalPages = Math.max(1, Math.ceil(filteredResults.length / pageSize));
@@ -118,81 +213,85 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   const renderRankBadge = (rank: number) => {
     if (rank === 1) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 text-amber-950 flex items-center justify-center font-black text-xs shadow-md ring-2 ring-amber-300">
-          <Crown className="w-4 h-4" />
-        </div>
+        <span className="w-8 h-8 rounded-full bg-amber-400 text-amber-950 font-black flex items-center justify-center text-sm shadow-md">
+          <Crown className="w-4 h-4 fill-amber-950" />
+        </span>
       );
     }
     if (rank === 2) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-300 to-slate-200 text-slate-800 flex items-center justify-center font-black text-xs shadow-md ring-2 ring-slate-300">
-          <Medal className="w-4 h-4" />
-        </div>
+        <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-800 font-black flex items-center justify-center text-sm shadow-sm">
+          <Medal className="w-4 h-4 text-slate-600" />
+        </span>
       );
     }
     if (rank === 3) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-700 to-amber-600 text-white flex items-center justify-center font-black text-xs shadow-md ring-2 ring-amber-600">
-          <Medal className="w-4 h-4" />
-        </div>
+        <span className="w-8 h-8 rounded-full bg-amber-700 text-white font-black flex items-center justify-center text-sm shadow-sm">
+          <Medal className="w-4 h-4 text-amber-200" />
+        </span>
       );
     }
     return (
-      <div className="w-7 h-7 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
+      <span className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center text-xs">
         {toBengaliNumber(rank)}
-      </div>
+      </span>
     );
   };
 
   return (
-    <div className="min-h-screen py-6 sm:py-10 px-3 sm:px-6 max-w-6xl mx-auto">
-      {/* Top Navigation */}
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <button
-          onClick={onNavigateHome}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border font-bold text-xs shadow-xs transition-all hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
-          style={{ borderColor: 'var(--card-border)', color: 'var(--text-main)', backgroundColor: 'var(--card)' }}
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span>হোমে ফিরে যাও</span>
-        </button>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-200">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+          <button
+            onClick={onNavigateHome}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors mb-2 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>হোমে ফিরে যাও</span>
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-200">
+              <Trophy className="w-7 h-7 fill-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>
+                লাইভ লিডারবোর্ড
+              </h1>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+                নবম-দশম শ্রেণির বিজ্ঞান শিক্ষার্থীদের সার্বক্ষণিক মেধা তালিকা ও রিয়েলটাইম র‍্যাংক
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            style={{ borderColor: 'var(--card-border)', color: 'var(--text-main)', backgroundColor: 'var(--card)' }}
+            className="px-3.5 py-2 rounded-2xl border text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            style={{
+              backgroundColor: 'var(--card)',
+              borderColor: 'var(--card-border)',
+              color: 'var(--text-main)'
+            }}
           >
-            <Share2 className="w-3.5 h-3.5 text-indigo-500" />
-            <span>{copiedShare ? 'লিংক কপি হয়েছে!' : 'লিডারবোর্ড শেয়ার'}</span>
+            {copiedShare ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
+            <span>{copiedShare ? 'লিংক কপি হয়েছে!' : 'শেয়ার করো'}</span>
           </button>
 
           <button
             onClick={() => onStartExam(selectedSubject !== 'all' ? selectedSubject : undefined)}
-            className="px-4 py-2 rounded-2xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+            className="px-5 py-2.5 rounded-2xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>লাইভ পরীক্ষা দাও</span>
+            <Sparkles className="w-4 h-4 text-yellow-300" />
+            <span>পরীক্ষা দাও</span>
           </button>
         </div>
       </div>
 
-      {/* Header Banner */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-bold mb-3 shadow-xs">
-          <Trophy className="w-4 h-4 text-amber-500" />
-          <span>সারাদেশের লাইভ বিজ্ঞান মেধা তালিকা</span>
-        </div>
-        <h1 className="text-2xl sm:text-4xl font-extrabold" style={{ color: 'var(--text-main)' }}>
-          লাইভ লিডারবোর্ড ও রেংকিং
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1.5 max-w-xl mx-auto">
-          পরীক্ষা শেষ করার সাথে সাথে তোমার স্কোর ও অবস্থান এখানে তাৎক্ষণিক আপডেট হয়
-        </p>
-      </div>
-
-      {/* Subject Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none">
+      {/* Subject Filter Pills (Horizontal Scroll) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 no-scrollbar">
         <button
           onClick={() => {
             setSelectedSubject('all');
@@ -205,7 +304,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
           }`}
           style={selectedSubject !== 'all' ? { borderColor: 'var(--card-border)', color: 'var(--text-main)', backgroundColor: 'var(--card)' } : {}}
         >
-          সকল বিষয়
+          সকল বিষয়
         </button>
         {SUBJECTS.map((sub) => (
           <button
@@ -245,7 +344,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               selectedTimeframe === 'all' ? 'bg-[#6C5CE7] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            সর্বকালীন
+            সর্বকালীন (All Time)
           </button>
           <button
             onClick={() => {
@@ -256,7 +355,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               selectedTimeframe === 'week' ? 'bg-[#6C5CE7] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            এই সপ্তাহ
+            এই সপ্তাহ (Week)
           </button>
           <button
             onClick={() => {
@@ -267,7 +366,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               selectedTimeframe === 'today' ? 'bg-[#6C5CE7] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            আজকের পরীক্ষা
+            আজকের পরীক্ষা (Today)
           </button>
         </div>
 
@@ -307,7 +406,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               {toBengaliNumber(top3[1].score)} / {toBengaliNumber(top3[1].totalMarks)}
             </div>
             <div className="mt-2 text-[10px] text-slate-500">
-              সময়: {toBengaliNumber(formatTimer(top3[1].timeTaken))}
+              সময়: {toBengaliNumber(formatTimer(top3[1].timeTaken))}
             </div>
           </div>
 
@@ -332,7 +431,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               {toBengaliNumber(top3[0].score)} / {toBengaliNumber(top3[0].totalMarks)}
             </div>
             <div className="mt-2 text-[11px] font-semibold text-slate-500">
-              সময়: {toBengaliNumber(formatTimer(top3[0].timeTaken))}
+              সময়: {toBengaliNumber(formatTimer(top3[0].timeTaken))}
             </div>
           </div>
 
@@ -352,7 +451,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               {toBengaliNumber(top3[2].score)} / {toBengaliNumber(top3[2].totalMarks)}
             </div>
             <div className="mt-2 text-[10px] text-slate-500">
-              সময়: {toBengaliNumber(formatTimer(top3[2].timeTaken))}
+              সময়: {toBengaliNumber(formatTimer(top3[2].timeTaken))}
             </div>
           </div>
         </div>
@@ -374,17 +473,17 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               <Trophy className="w-7 h-7" />
             </div>
             <h3 className="text-base font-bold mb-1" style={{ color: 'var(--text-main)' }}>
-              এখনও কোনো ফলাফল পাওয়া যায়নি
+              Be first! 1 টা এক্সাম দিলেই লিডারবোর্ডে আসবে!
             </h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
-              প্রথম শিক্ষার্থী হিসেবে পরীক্ষা দিয়ে লিডারবোর্ডের শীর্ষে নিজের নাম লেখাও!
+              এখনও কোনো ফলাফল পাওয়া যায়নি। এখনই পরীক্ষা শুরু করে ১ম স্থান অর্জন করো!
             </p>
             <button
               onClick={() => onStartExam(selectedSubject !== 'all' ? selectedSubject : undefined)}
               className="px-5 py-2.5 rounded-2xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs shadow-md inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>প্রথম পরীক্ষা শুরু করো</span>
+              <span>Start Exam</span>
             </button>
           </div>
         ) : (
@@ -395,22 +494,21 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                   <th className="py-3.5 px-4 text-center w-16">র‍্যাংক</th>
                   <th className="py-3.5 px-4">শিক্ষার্থী</th>
                   <th className="py-3.5 px-4">বিষয় ও অধ্যায়</th>
+                  <th className="py-3.5 px-4 text-center">লেভেল ও XP</th>
                   <th className="py-3.5 px-4 text-center">প্রাপ্ত স্কোর</th>
                   <th className="py-3.5 px-4 text-center">সময়</th>
                   <th className="py-3.5 px-4 text-right">তারিখ</th>
                 </tr>
               </thead>
               <tbody className="divide-y text-xs" style={{ borderColor: 'var(--card-border)' }}>
-                {paginatedResults.map((item, index) => {
-                  const isGuestGated = !currentUser && item.rank && item.rank > 10;
+                {paginatedResults.map((item) => {
                   const isCurrentUser =
                     currentUser &&
                     (item.userId === currentUser.id ||
                       item.userEmail?.toLowerCase() === currentUser.email?.toLowerCase());
 
-                  if (isGuestGated) {
-                    return null;
-                  }
+                  const userLvl = calcLevel(item.score ?? 0);
+                  const lvlDetails = LEVEL_DETAILS[userLvl] || LEVEL_DETAILS[0];
 
                   return (
                     <tr
@@ -460,6 +558,14 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                          <span>{lvlDetails.badge}</span>
+                          <span>লেভেল {toBengaliNumber(userLvl)}</span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">+{toBengaliNumber(item.xpEarned ?? 100)} XP</span>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center">
                         <div className="inline-flex flex-col items-center">
                           <span className="font-black text-sm text-[#6C5CE7]">
                             {toBengaliNumber(item.score)} / {toBengaliNumber(item.totalMarks)}
@@ -485,30 +591,6 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 })}
               </tbody>
             </table>
-
-            {/* Guest gating prompt below top 10 */}
-            {!currentUser && filteredResults.length > 10 && (
-              <div className="p-6 border-t bg-gradient-to-b from-transparent via-slate-50/80 to-indigo-50/60 dark:via-slate-900/40 dark:to-indigo-950/40 text-center">
-                <div className="max-w-md mx-auto space-y-2.5">
-                  <span className="inline-block px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-xs font-bold">
-                    শীর্ষ ১০ জন শিক্ষার্থীর ফলাফল দেখানো হচ্ছে
-                  </span>
-                  <h4 className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>
-                    বাকি {toBengaliNumber(filteredResults.length - 10)} জনের ফলাফল ও নিজের র‍্যাঙ্ক দেখতে লগইন করো
-                  </h4>
-                  <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.location.href = '/login';
-                      }
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs shadow-md inline-flex items-center gap-2 cursor-pointer transition-all"
-                  >
-                    <span>গুগল অথবা ইমেইল দিয়ে লগইন</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -518,15 +600,15 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             className="p-3 border-t flex items-center justify-between text-xs"
             style={{ borderColor: 'var(--card-border)', color: 'var(--text-muted)' }}
           >
-            <span>
+            <div>
               পৃষ্ঠা {toBengaliNumber(currentPage)} / {toBengaliNumber(totalPages)} (মোট {toBengaliNumber(filteredResults.length)} জন)
-            </span>
+            </div>
 
             <div className="flex items-center gap-1">
               <button
-                disabled={currentPage <= 1}
+                disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-2.5 py-1 rounded-lg border text-xs font-bold disabled:opacity-40 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-lg border disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 style={{ borderColor: 'var(--card-border)' }}
               >
                 পূর্ববর্তী
@@ -534,7 +616,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               <button
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-2.5 py-1 rounded-lg border text-xs font-bold disabled:opacity-40 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-lg border disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 style={{ borderColor: 'var(--card-border)' }}
               >
                 পরবর্তী
@@ -546,5 +628,3 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     </div>
   );
 };
-
-export default LeaderboardPage;

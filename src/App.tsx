@@ -256,6 +256,16 @@ export default function App() {
               if (Array.isArray(uData.answeredQuestionIds)) {
                 setFirestoreAnsweredIds(uData.answeredQuestionIds);
               }
+              setUser((prev) => ({
+                ...prev,
+                name: uData.displayName || prev.name,
+                school: uData.school || prev.school,
+                totalExams: uData.totalExams ?? prev.totalExams ?? 0,
+                totalXP: uData.xp ?? uData.totalXP ?? prev.totalXP ?? 0,
+                totalCorrect: uData.totalCorrect ?? prev.totalCorrect ?? 0,
+                totalAttempted: uData.totalAttempted ?? prev.totalAttempted ?? 0,
+                level: Math.max(1, uData.level || prev.level || 1)
+              }));
             }
           } catch (err) {
             // Ignore offline read
@@ -698,6 +708,9 @@ export default function App() {
               <span className="font-bold" style={{ color: 'var(--text-main)' }}>Tension Free Science</span>
               <span>—</span>
               <span>ভয় নয়, বিজ্ঞান হবে সহজ</span>
+            </div>
+            <div className="text-center text-xs sm:text-sm text-slate-500 dark:text-white/60">
+              Developed with ❤️ by <span className="text-[#6C5CE7] dark:text-purple-400 font-bold">Kawsar Kayesh</span> | Powered by Tension Free Science Team
             </div>
             <div className="flex items-center gap-4">
               <a

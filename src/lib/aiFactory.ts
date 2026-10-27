@@ -48,17 +48,23 @@ export interface GeneratedMCQQueueItem {
   promptId?: string;
 }
 
-export const GROQ_MODELS = [
-  'llama-3.1-70b-versatile',
-  'llama-3.1-8b-instant',
-  'mixtral-8x7b-32768',
-  'gemma2-9b-it'
+export interface GroqModelConfig {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+}
+
+export const GROQ_MODELS: GroqModelConfig[] = [
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', isDefault: true },
+  { id: 'llama-3.1-70b-versatile', name: 'Llama 3.1 70B Versatile', isDefault: false },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', isDefault: false },
+  { id: 'llama3-70b-8192', name: 'Llama 3 70B', isDefault: false }
 ];
 
 export const DEFAULT_AI_KEYS = {
-  gemini: 'AQ.Ab8RN6JLgxZ4SpotVvhP3O80iuSv57JE4fVyEzKNk3Moj0DiCg',
-  groq: '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',
-  deepseek: 'sk-682f0d9fb7564cb4b9794c06d0a84b4f'
+  gemini: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_GEMINI_API_KEY || import.meta.env?.GEMINI_API_KEY)) || '',
+  groq: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GROQ_API_KEY) || '',
+  deepseek: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEEPSEEK_API_KEY) || ''
 };
 
 export const AI_PROVIDERS: Record<'gemini' | 'groq' | 'deepseek', AIProviderConfig> = {
@@ -74,13 +80,13 @@ export const AI_PROVIDERS: Record<'gemini' | 'groq' | 'deepseek', AIProviderConf
   },
   groq: {
     id: 'groq',
-    name: 'Groq Llama 3.1',
+    name: 'Groq Llama 3.3',
     apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
     key: (typeof window !== 'undefined' && localStorage.getItem('groq_key')) || DEFAULT_AI_KEYS.groq,
     freeLimit: 999999, // Unlimited Mode
     used: 0,
     role: 'HARD MCQ MAKER - Hard + Admission type',
-    model: 'llama-3.1-70b-versatile'
+    model: 'llama-3.3-70b-versatile'
   },
   deepseek: {
     id: 'deepseek',
@@ -274,8 +280,8 @@ export async function callAI(
   } else if (provider.id === 'groq') {
     // Groq model fallback list: default + fallbacks
     const candidateModels = groqModelOverride
-      ? [groqModelOverride, ...GROQ_MODELS.filter((m) => m !== groqModelOverride)]
-      : [provider.model || 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+      ? [groqModelOverride, ...GROQ_MODELS.map((m) => m.id).filter((id) => id !== groqModelOverride)]
+      : [provider.model || 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192'];
 
     let lastError: Error | null = null;
 
@@ -555,6 +561,9 @@ export async function generateWithRotation(options: {
   let currentProviderIndex = preferredAI !== 'auto' ? providerOrder.indexOf(preferredAI) : 0;
   if (currentProviderIndex === -1) currentProviderIndex = 0;
 
+  let consecutiveFailures = 0;
+  const MAX_RETRIES = 3;
+
   while (remaining > 0) {
     if (checkIsActive) {
       const active = await checkIsActive();
@@ -593,6 +602,8 @@ export async function generateWithRotation(options: {
       if (!Array.isArray(rawMcqs) || rawMcqs.length === 0) {
         throw new Error('AI returned an empty array of MCQs');
       }
+
+      consecutiveFailures = 0; // reset on successful generation
 
       recordUsage(ai.id, rawMcqs.length);
       byAIStats[ai.id] = (byAIStats[ai.id] || 0) + rawMcqs.length;
@@ -644,7 +655,17 @@ export async function generateWithRotation(options: {
       // Rotate to next AI for fair distributed workload
       currentProviderIndex++;
     } catch (err: any) {
-      console.warn(`AI call failed with ${ai.name}, rotating to next AI:`, err);
+      consecutiveFailures++;
+      console.warn(`AI call failed with ${ai.name} (attempt ${consecutiveFailures}/${MAX_RETRIES}):`, err);
+      if (consecutiveFailures >= MAX_RETRIES) {
+        onProgress?.({
+          generatedCount: results.length,
+          totalTarget: count,
+          currentAI: 'Stopped',
+          logMessage: `সর্বোচ্চ ${MAX_RETRIES} বার চেষ্টার পরও প্রশ্ন তৈরি সম্ভব হয়নি (${err.message?.slice(0, 50)})। প্রসেস সমাপ্ত করা হলো।`
+        });
+        break;
+      }
       onProgress?.({
         generatedCount: results.length,
         totalTarget: count,

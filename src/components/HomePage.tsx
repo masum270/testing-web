@@ -6,6 +6,8 @@ import { toBengaliNumber, calculateAccuracy } from '../utils/quizLogic.js';
 import { VideoItem } from '../types/video.js';
 import videosData from '../data/videos.json' with { type: 'json' };
 import { VideoPlayerModal } from './VideoPlayerModal.js';
+import { db, collection, doc, getDoc } from '../firebase.js';
+import { getCountFromServer } from 'firebase/firestore';
 import {
   FlaskConical,
   Sparkles,
@@ -27,6 +29,7 @@ import {
 } from 'lucide-react';
 import { AuthUser } from '../types/auth.js';
 import { DailyStreak } from './DailyStreak.js';
+import { getLevelProgress } from '../lib/levelSystem.js';
 
 interface HomePageProps {
   user: UserProfile;
@@ -53,6 +56,56 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [activeCategory, setActiveCategory] = useState<'All' | 'Science' | 'General'>('All');
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
   const [videos, setVideos] = useState<VideoItem[]>(videosData as VideoItem[]);
+  const [totalQuestionsCount, setTotalQuestionsCount] = useState<number>(() => {
+    return SUBJECTS.reduce((acc, s) => acc + (s.totalMCQs || 450), 0);
+  });
+  const [liveStats, setLiveStats] = useState<{
+    totalExams: number;
+    totalXP: number;
+    totalCorrect: number;
+    totalAttempted: number;
+    level: number;
+  } | null>(null);
+
+  // Fetch dynamic live total questions count from Firestore
+  useEffect(() => {
+    const fetchQuestionCount = async () => {
+      try {
+        const countSnap = await getCountFromServer(collection(db, 'questions'));
+        const dbCount = countSnap.data().count;
+        if (dbCount > 0) {
+          setTotalQuestionsCount((prev) => Math.max(prev, dbCount));
+        }
+      } catch {
+        // Fallback to computed subjects sum
+      }
+    };
+    fetchQuestionCount();
+  }, []);
+
+  // Fetch live user stats from Firestore users collection
+  useEffect(() => {
+    if (!authUser?.id) return;
+    const fetchLiveUserStats = async () => {
+      try {
+        const userDocRef = doc(db, 'users', authUser.id);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const d = userSnap.data();
+          setLiveStats({
+            totalExams: d.totalExams ?? user.totalExams ?? 0,
+            totalXP: d.xp ?? d.totalXP ?? user.totalXP ?? 0,
+            totalCorrect: d.totalCorrect ?? user.totalCorrect ?? 0,
+            totalAttempted: d.totalAttempted ?? user.totalAttempted ?? 0,
+            level: Math.max(1, d.level || user.level || 1)
+          });
+        }
+      } catch {
+        // Local state fallback
+      }
+    };
+    fetchLiveUserStats();
+  }, [authUser?.id, user.totalExams, user.totalXP, user.totalAttempted]);
 
   useEffect(() => {
     const loadVideos = async () => {
@@ -72,7 +125,12 @@ export const HomePage: React.FC<HomePageProps> = ({
     loadVideos();
   }, []);
 
-  const overallAccuracy = calculateAccuracy(user.totalCorrect, user.totalAttempted);
+  const displayedExams = liveStats ? liveStats.totalExams : user.totalExams;
+  const displayedXP = liveStats ? liveStats.totalXP : user.totalXP;
+  const displayedCorrect = liveStats ? liveStats.totalCorrect : user.totalCorrect;
+  const displayedAttempted = liveStats ? liveStats.totalAttempted : user.totalAttempted;
+  const displayedLevel = Math.max(1, liveStats?.level || user.level || 1);
+  const overallAccuracy = calculateAccuracy(displayedCorrect, displayedAttempted);
 
   // Top 4 featured videos for home page
   const featuredVideos = videos.slice(0, 4);
@@ -139,8 +197,8 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             {/* Subtitle */}
             <p className="mt-3.5 text-base sm:text-lg font-normal leading-relaxed break-words" style={{ color: 'var(--text-muted)' }}>
-              বিজ্ঞান আর কঠিন লাগবে না! এনসিটিবি কারিকুলাম ভিত্তিক ৩১২+ লাইভ MCQ পরীক্ষা, 
-              অধ্যায়ভিত্তিক পুঙ্খানুপুঙ্খ ব্যাখ্যা এবং Tension Free Science ইউটিউব ভিডিও ক্লাস।
+              বিজ্ঞান আর কঠিন লাগবে না! এনসিটিবি কারিকুলাম ভিত্তিক {toBengaliNumber(totalQuestionsCount)}+ লাইভ MCQ পরীক্ষা, 
+              অধ্যায়ভিত্তিক প্রশ্নব্যাংক, পুঙ্খানুপুঙ্খ ব্যাখ্যা এবং Tension Free Science ইউটিউব ভিডিও ক্লাস।
             </p>
 
             {/* CTA Buttons */}
@@ -185,14 +243,61 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             )}
 
+            {/* Student Level & XP Progress Card */}
+            {isLoggedIn && (
+              <div
+                className="mt-6 p-4 sm:p-5 rounded-2xl border shadow-sm max-w-4xl mx-auto text-left"
+                style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}
+              >
+                {(() => {
+                  const progress = getLevelProgress(displayedXP);
+                  return (
+                    <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">{progress.badge}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-[#6C5CE7]">
+                                লেভেল {toBengaliNumber(progress.currentLevel)}
+                              </span>
+                              <span className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>
+                                {progress.title}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                              {progress.currentLevel >= 7
+                                ? 'সর্বোচ্চ লেজেন্ডারি লেভেল অর্জিত!'
+                                : `পরবর্তী লেভেলের জন্য আরও ${toBengaliNumber(progress.neededXP)} XP প্রয়োজন`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>
+                          {toBengaliNumber(displayedXP)} / {toBengaliNumber(progress.nextXP)} XP ({toBengaliNumber(progress.percentage)}%)
+                        </div>
+                      </div>
+
+                      {/* XP Progress Bar */}
+                      <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative border border-slate-200 dark:border-slate-700">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-500 rounded-full transition-all duration-700 ease-out"
+                          style={{ width: `${progress.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Performance Summary Bar */}
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto">
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto">
               <div className="rounded-2xl p-3.5 sm:p-4 border shadow-xs text-center" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}>
                 <div className="w-8 h-8 rounded-xl bg-violet-100 text-[#6C5CE7] flex items-center justify-center mx-auto mb-2">
                   <CheckCircle className="w-4 h-4" />
                 </div>
                 <div className="text-xl sm:text-2xl font-black" style={{ color: 'var(--text-main)' }}>
-                  {toBengaliNumber(user.totalExams)} টি
+                  {displayedExams > 0 ? `${toBengaliNumber(displayedExams)} টি` : 'শুরু করুন'}
                 </div>
                 <div className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>মোট পরীক্ষা</div>
               </div>
@@ -202,9 +307,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Target className="w-4 h-4" />
                 </div>
                 <div className="text-xl sm:text-2xl font-black" style={{ color: 'var(--text-main)' }}>
-                  {toBengaliNumber(overallAccuracy)}%
+                  {displayedAttempted > 0 ? `${toBengaliNumber(overallAccuracy)}%` : 'শুরু করুন'}
                 </div>
-                <div className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>গড় নির্ভুলতা</div>
+                <div className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>গড় পারফরম্যান্স</div>
               </div>
 
               <div className="rounded-2xl p-3.5 sm:p-4 border shadow-xs text-center" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--card-border)' }}>
@@ -212,7 +317,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Flame className="w-4 h-4" />
                 </div>
                 <div className="text-xl sm:text-2xl font-black" style={{ color: 'var(--text-main)' }}>
-                  {toBengaliNumber(user.totalXP)}
+                  {displayedXP > 0 ? toBengaliNumber(displayedXP) : (displayedExams > 0 ? '০' : 'শুরু করুন')}
                 </div>
                 <div className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>অর্জিত মোট XP</div>
               </div>
@@ -222,7 +327,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Award className="w-4 h-4" />
                 </div>
                 <div className="text-xl sm:text-2xl font-black" style={{ color: 'var(--text-main)' }}>
-                  লেভেল {toBengaliNumber(user.level)}
+                  লেভেল {toBengaliNumber(displayedLevel)}
                 </div>
                 <div className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>বর্তমান র‍্যাঙ্ক</div>
               </div>
