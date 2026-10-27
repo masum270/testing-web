@@ -58,7 +58,9 @@ export const GROQ_MODELS: GroqModelConfig[] = [
   { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', isDefault: true },
   { id: 'llama-3.1-70b-versatile', name: 'Llama 3.1 70B Versatile', isDefault: false },
   { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', isDefault: false },
-  { id: 'llama3-70b-8192', name: 'Llama 3 70B', isDefault: false }
+  { id: 'llama3-70b-8192', name: 'Llama 3 70B', isDefault: false },
+  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B 32k', isDefault: false },
+  { id: 'gemma2-9b-it', name: 'Gemma 2 9B IT', isDefault: false }
 ];
 
 export const DEFAULT_AI_KEYS = {
@@ -281,7 +283,7 @@ export async function callAI(
     // Groq model fallback list: default + fallbacks
     const candidateModels = groqModelOverride
       ? [groqModelOverride, ...GROQ_MODELS.map((m) => m.id).filter((id) => id !== groqModelOverride)]
-      : [provider.model || 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192'];
+      : [provider.model || 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
 
     let lastError: Error | null = null;
 

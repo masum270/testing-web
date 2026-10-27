@@ -27,11 +27,11 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onClos
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [generatedCodeDisplay, setGeneratedCodeDisplay] = useState<string | null>(null);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Step 1: Send OTP
-  const handleSendCode = async (e: React.FormEvent) => {
+  const handleRequestResetLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const cleanEmail = email.trim().toLowerCase();
@@ -42,15 +42,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onClos
 
     setIsLoading(true);
     try {
-      const code = generateCode();
-      await sendOTPEmail(cleanEmail, 'reset', code);
-      if (!import.meta.env.PROD) {
-        console.log(`[TFS OTP] Password reset request for: ${cleanEmail}`);
-      }
-
-      setIsLoading(false);
-      setStep(2);
-    } catch (err: any) {
+      const res = await requestPasswordReset(email);
       setIsLoading(false);
       setError(err?.message || 'ওটিপি কোড পাঠানো যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
     }
@@ -203,116 +195,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onClos
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="student@gmail.com"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#6C5CE7]/30 transition-all"
-                  style={{
-                    backgroundColor: 'var(--bg)',
-                    borderColor: 'var(--card-border)',
-                    color: 'var(--text-main)'
-                  }}
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 rounded-2xl bg-[#6C5CE7] hover:bg-[#5848df] text-white font-bold text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{isLoading ? 'কোড পাঠানো হচ্ছে...' : '৬ ডিজিটের কোড পাঠান'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        )}
-
-        {/* STEP 2: Enter 6-digit OTP & New Password */}
-        {step === 2 && (
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px]">
-                  কোড পাঠানো হয়েছে: <strong className="text-slate-700 dark:text-slate-200">{email}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="text-[11px] text-[#6C5CE7] hover:underline flex items-center gap-1 cursor-pointer font-bold"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>পরিবর্তন</span>
-                </button>
-              </div>
-
-              <div className="p-2.5 mb-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-center">
-                <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">
-                  আপনার ইমেইলে ৬ ডিজিটের কোড পাঠানো হয়েছে
-                </span>
-              </div>
-
-              <label className="text-xs font-bold block mb-2 text-slate-700 dark:text-slate-300">
-                ৬ ডিজিটের OTP কোড লিখুন:
-              </label>
-
-              {/* 6 Digit Input Boxes */}
-              <div className="grid grid-cols-6 gap-2 sm:gap-2.5 my-2">
-                {otpDigits.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => {
-                      inputRefs.current[index] = el;
-                    }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleDigitChange(index, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(index, e)}
-                    className="w-full h-12 text-center text-lg font-bold font-mono rounded-xl border border-slate-300 dark:border-slate-700 focus:border-[#6C5CE7] focus:ring-2 focus:ring-[#6C5CE7]/30 outline-none transition-all"
-                    style={{
-                      backgroundColor: 'var(--bg)',
-                      color: 'var(--text-main)'
-                    }}
-                    autoFocus={index === 0}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold block mb-1 text-slate-700 dark:text-slate-300">
-                নতুন পাসওয়ার্ড:
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  required
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="কমপক্ষে ৬ অক্ষর"
-                  className="w-full pl-10 pr-4 py-2 rounded-xl border text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#6C5CE7]/30 transition-all"
-                  style={{
-                    backgroundColor: 'var(--bg)',
-                    borderColor: 'var(--card-border)',
-                    color: 'var(--text-main)'
-                  }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold block mb-1 text-slate-700 dark:text-slate-300">
-                নতুন পাসওয়ার্ড নিশ্চিত করুন:
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="পুনরায় একই পাসওয়ার্ড দিন"
-                  className="w-full pl-10 pr-4 py-2 rounded-xl border text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#6C5CE7]/30 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#6C5CE7]/30 transition-all"
                   style={{
                     backgroundColor: 'var(--bg)',
                     borderColor: 'var(--card-border)',
