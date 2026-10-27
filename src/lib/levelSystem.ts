@@ -36,8 +36,7 @@ export function calcLevel(xp: number): number {
   if (xp >= 3500) return 4;
   if (xp >= 2200) return 3;
   if (xp >= 1000) return 2;
-  if (xp >= 400) return 1;
-  return 0;
+  return 1;
 }
 
 export function getNextLevelXP(currentLevel: number): number {
@@ -46,7 +45,7 @@ export function getNextLevelXP(currentLevel: number): number {
 }
 
 export function getPreviousLevelXP(currentLevel: number): number {
-  if (currentLevel <= 0) return 0;
+  if (currentLevel <= 1) return 0;
   return LEVEL_XP[currentLevel] || 0;
 }
 
@@ -60,13 +59,13 @@ export function getLevelProgress(xp: number): {
   badge: string;
 } {
   const currentLevel = calcLevel(xp);
-  const prevXP = currentLevel === 0 ? 0 : LEVEL_XP[currentLevel] || 0;
+  const prevXP = currentLevel <= 1 ? 0 : (LEVEL_XP[currentLevel] || 0);
   const nextXP = currentLevel >= 7 ? 10000 : (LEVEL_XP[currentLevel + 1] || 400);
   const totalForCurrentTier = Math.max(1, nextXP - prevXP);
   const earnedInCurrentTier = Math.max(0, xp - prevXP);
   const percentage = currentLevel >= 7 ? 100 : Math.min(100, Math.round((earnedInCurrentTier / totalForCurrentTier) * 100));
   const neededXP = Math.max(0, nextXP - xp);
-  const details = LEVEL_DETAILS[currentLevel] || LEVEL_DETAILS[0];
+  const details = LEVEL_DETAILS[currentLevel] || LEVEL_DETAILS[1];
 
   return {
     currentLevel,
